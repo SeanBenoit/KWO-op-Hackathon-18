@@ -1,5 +1,10 @@
 # KWO-op-Hackathon-18
 
+## Pre-Setup
+Create directory /data
+cd into /data
+clone this repo put its contents in /data
+
 ## Setup Cluster
 Follow instructions here: https://github.com/brunocfnba/docker-spark-cluster
 At docker create step use -v arg as /data:/data

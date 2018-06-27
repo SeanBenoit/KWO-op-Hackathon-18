@@ -6,5 +6,3 @@ import spark.implicits._
 
 val df = spark.read.json("publicJSONFeed.json")
 df.show()
-val flattened = df.select($"vehicle", explode($"vehicle").as("vehicle_flat"))
-flattened.show()

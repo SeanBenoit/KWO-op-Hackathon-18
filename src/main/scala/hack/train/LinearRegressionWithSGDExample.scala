@@ -21,11 +21,21 @@ package hack.train
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.log4j._
 import org.apache.hadoop.fs._
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
 // $example on$
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
+import org.apache.spark.mllib.feature.Normalizer
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.feature.StandardScaler
+import org.apache.spark.mllib.classification.{LogisticRegressionModel, LogisticRegressionWithLBFGS}
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.classification.{NaiveBayes, NaiveBayesModel}
+
 // $example off$
 
 @deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
@@ -35,12 +45,15 @@ object LinearRegressionWithSGDExample {
   def convertToSeconds(t: String): Integer = {
     val split = t.split(":")
     val seconds = split(0).toInt*3600 + split(1).toInt*60 + split(2).toInt
+    //val seconds = (split(0)+split(1)+split(2)).toInt
     seconds
   }
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("LinearRegressionWithSGDExample")
-    val sc = new SparkContext(conf)
+    // val conf = new SparkConf().setAppName("LinearRegressionWithSGDExample")
+    // val sc = new SparkContext(conf)
+    val spark: SparkSession = SparkSession.builder.getOrCreate
+    val sc = spark.sparkContext
 
     val trips = sc.textFile("/data/ttc/trips.txt")
       .map(line => {
@@ -56,8 +69,14 @@ object LinearRegressionWithSGDExample {
         (split(0), convertToSeconds(split(1)), split(3), tripMap.value.getOrElse(split(0), "routeIDnotFOund"))
       })
       .map{ case(tripId, arrival, stop, route) => LabeledPoint(arrival.toDouble, Vectors.dense(Array(tripId, stop, route).map(_.toDouble)))}
-      .cache()
+      .filter(x => x.label < 86400)
 
+    val scaler2 = new StandardScaler(withMean = true, withStd = true).fit(stopTimes.map(x => x.features))
+
+    val normStopTimes = stopTimes.map(x => (x.label, scaler2.transform(Vectors.dense(x.features.toArray))))
+       .filter(x => x._1 < 86400)
+       .map(x => LabeledPoint(x._1, x._2))
+    //   .saveAsTextFile("/data/tmp/labeled")
     // // $example on$
     // // Load and parse the data
     // val data = sc.textFile("/data/mllib/ridge-data/lpsa.data")
@@ -67,15 +86,25 @@ object LinearRegressionWithSGDExample {
     // }.cache()
 
     // Building the model
-    val numIterations = 10
-    val stepSize = 0.0000000000000001
-    val model = LinearRegressionWithSGD.train(stopTimes, numIterations, stepSize)
+    val numIterations = 100
+    val stepSize = 8
+    val model = LinearRegressionWithSGD.train(normStopTimes, numIterations, stepSize)
+    // val model = new LogisticRegressionWithLBFGS()
+    //   .setNumClasses(86400)
+    //   .run(normStopTimes)
+    // val model = NaiveBayes.train(stopTimes, lambda = 1.0, modelType = "multinomial")
 
+    // val predictionAndLabel = stopTimes.map(p => (model.predict(p.features), p.label))
+    // val accuracy = 1.0 * predictionAndLabel.filter(x => x._1 == x._2).count() / stopTimes.count()
     // Evaluate model on training examples and compute training error
-    val valuesAndPreds = stopTimes.map { point =>
+    val valuesAndPreds = normStopTimes.map { point =>
       val prediction = model.predict(point.features)
       (point.label, prediction)
     }
+
+    // val metrics = new MulticlassMetrics(valuesAndPreds)
+    // val accuracy = metrics.accuracy
+    // log.info(s"@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ Accuracy = $accuracy")
     val MSE = valuesAndPreds.map{ case(v, p) => math.pow((v - p), 2) }.mean()
     log.info(s"############################################################################ training Mean Squared Error $MSE")
 
@@ -87,7 +116,7 @@ object LinearRegressionWithSGDExample {
 
     valuesAndPreds.saveAsTextFile("/data/model/tmp/predictions")
     // val sameModel = LinearRegressionModel.load(sc, "/data/model/tmp/scalaLinearRegressionWithSGDModel")
-    // // $example off$
+    // $example off$
 
     sc.stop()
   }

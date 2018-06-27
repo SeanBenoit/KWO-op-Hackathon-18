@@ -15,3 +15,5 @@ Edit Code under src dir
 Run `mvn clean package` in root to compile
 
 Run Job: `docker run --rm -it --link master:master --volumes-from spark-datastore brunocf/spark-submit spark-submit --master spark://172.17.0.2:7077 --class hack.train.trainModel /data/target/assignments-1.0.jar --input /data/test.txt --output /data/testOut`
+
+Run Example LinerSGD: `docker run --rm -it --link master:master --volumes-from spark-datastore brunocf/spark-submit spark-submit --master spark://172.17.0.2:7077 --class hack.train.LinearRegressionWithSGDExample /data/target/assignments-1.0.jar`
